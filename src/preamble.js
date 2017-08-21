@@ -1705,34 +1705,6 @@ function addOnPostRun(cb) {
 }
 {{{ maybeExport('addOnPostRun') }}}
 
-// Tools
-
-/** @type {function(string, boolean=, number=)} */
-function intArrayFromString(stringy, dontAddNull, length) {
-  var len = length > 0 ? length : lengthBytesUTF8(stringy)+1;
-  var u8array = new Array(len);
-  var numBytesWritten = stringToUTF8Array(stringy, u8array, 0, u8array.length);
-  if (dontAddNull) u8array.length = numBytesWritten;
-  return u8array;
-}
-{{{ maybeExport('intArrayFromString') }}}
-
-function intArrayToString(array) {
-  var ret = [];
-  for (var i = 0; i < array.length; i++) {
-    var chr = array[i];
-    if (chr > 0xFF) {
-#if ASSERTIONS
-      assert(false, 'Character code ' + chr + ' (' + String.fromCharCode(chr) + ')  at offset ' + i + ' not in 0x00-0xFF.');
-#endif
-      chr &= 0xFF;
-    }
-    ret.push(String.fromCharCode(chr));
-  }
-  return ret.join('');
-}
-{{{ maybeExport('intArrayToString') }}}
-
 // Deprecated: This function should not be called because it is unsafe and does not provide
 // a maximum length limit of how many bytes it is allowed to write. Prefer calling the
 // function stringToUTF8Array() instead, which takes in a maximum length that can be used
@@ -2213,16 +2185,20 @@ function integrateWasmJS(Module) {
 
   function getBinary() {
     try {
-      var binary;
       if (Module['wasmBinary']) {
-        binary = Module['wasmBinary'];
-        binary = new Uint8Array(binary);
-      } else if (Module['readBinary']) {
-        binary = Module['readBinary'](wasmBinaryFile);
+        return new Uint8Array(Module['wasmBinary']);
+      }
+#if SUPPORT_BASE64_EMBEDDING
+      var binary = tryParseAsDataURI(wasmBinaryFile);
+      if (binary) {
+        return binary;
+      }
+#endif
+      if (Module['readBinary']) {
+        return Module['readBinary'](wasmBinaryFile);
       } else {
         throw "on the web, we need the wasm binary to be preloaded and set on Module['wasmBinary']. emcc.py will do that for you when generating HTML (but not JS)";
       }
-      return binary;
     }
     catch (err) {
       abort(err);
